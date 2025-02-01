@@ -22,14 +22,6 @@ Stagehand is an SDK for automating browsers. It's built on top of [Playwright](h
 
 ## Curtain Call
 
-Get ready for a show-stopping development experience. Just run:
-
-```bash
-npm install && npm start
-```
-
-## What's Next?
-
 ### Add your API keys
 
 Required API keys/environment variables are in the `.env.example` file. Copy it to `.env` and add your API keys.
@@ -37,6 +29,16 @@ Required API keys/environment variables are in the `.env.example` file. Copy it 
 ```bash
 cp .env.example .env && nano .env # Add your API keys to .env
 ```
+
+### Run the project
+
+Get ready for a show-stopping development experience. Just run:
+
+```bash
+npm install && npm start
+```
+
+## What's Next?
 
 ### Custom .cursorrules
 
