@@ -25,6 +25,11 @@ import chalk from "chalk";
 import dotenv from "dotenv";
 import { announce } from "./utils.js";
 import { promises as fs } from "fs";
+import { z } from "zod";
+import { Anthropic } from '@anthropic-ai/sdk';
+
+
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 dotenv.config();
 
@@ -49,7 +54,7 @@ const browserbase = new Browserbase({
  */
 async function persistContextSession(
   contextId: string,
-  urlToLoginTo: string = "https://github.com/login"
+  urlToLoginTo: string = "https://www.linkedin.com/"
 ) {
   const stagehand = new Stagehand({
     ...StagehandConfig,
@@ -113,24 +118,96 @@ async function openPersistedContextSession(contextId: string) {
   );
   await openDebuggerUrl(stagehand.browserbaseSessionID!);
   // This will be logged in
-  await page.goto(`https://github.com/browserbase/stagehand/issues/new`);
-
-  //   Generate a list of form elements with actionable inputs
-  const formCandidates = await page.observe({
-    instruction: `Fill in the form with the following values:
-	Title: "My computer is on fire"
-	Description: "I accidentally navigated to your Instagram using Stagehand and caused my laptop to overheat. Please help."
-	Then click the "create" button
-	`,
-    returnAction: true,
-    onlyVisible: false,
+  
+  await page.goto(`https://www.linkedin.com/posts/ericlay-virio_if-i-was-the-head-of-demand-gen-of-a-1m-activity-7315401783382589441-NwyE?utm_source=share&utm_medium=member_desktop&rcm=ACoAAC88rZMBfZU-EPGusGweo1dOlDTeh4j97Bk`, {
+    timeout: 60000,
+    waitUntil: 'domcontentloaded'
   });
-  console.log("formCandidates", formCandidates);
+
+  // Wait for the page to be visibly loaded
+  try {
+    await page.waitForSelector('.feed-shared-update-v2, .feed-shared-actor', { 
+      timeout: 30000 
+    });
+    console.log("LinkedIn post content loaded successfully");
+  } catch (error) {
+    console.log("Warning: Timed out waiting for some LinkedIn elements, continuing anyway");
+  }
+
+  await page.act({action: "click on 'most relevant' button"});
+  await page.act({action: "click on 'most recent the most recent comments are first' button from dropdown"});
+
+  const comment = await page.extract({
+      instruction: "extract an unanswered comment",
+      schema: z.object({
+        author: z.string(),
+        content: z.string(),
+      }),
+    });
+  console.log("comment", comment);
+
+  // Initial static comment response
+  // const staticCommentResponse = "Send me a connection request so I can DM you the playbook!";
+
+  try {
+    const anthropic = new Anthropic({
+      apiKey: ANTHROPIC_API_KEY,
+    });
+    
+    // Dynamic comment response from Anthropic
+    const dynamicCommentResponse = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20240620',
+      max_tokens: 100,
+      messages: [
+        { role: 'user', content: `Generate a concise response to this comment ${comment.content}.` }
+      ]
+    });
+
+    console.log('Response from Claude:', dynamicCommentResponse);
+    
+    await page.act({
+      action: `locate the comment by "${comment.author}" that says "${comment.content.substring(0, 40)}...", click its specific reply button, and wait for the reply input field to appear`
+    });
+    
+    // Now type specifically into the reply input that just appeared
+    await page.act({
+      action: `type "${dynamicCommentResponse.content[0].text}" into the reply input field that just appeared for ${comment.author}'s comment`
+    });
+    // Use the dynamic response content
+    // await page.act({action: `enter the response ${dynamicCommentResponse.content[0].text} into the comment box`});
+
+    // wait for approval from the user
+    console.log(
+      chalk.yellow("\n\nIf the comment looks good, press enter to continue...\n\n")
+    );
+    await waitForEnter();
+
+    // fill in the form with the values
+    await page.act({action: "click on the 'reply' button to post the drafted comment"});
+
+  } catch (error) {
+    console.error('comment response failed');
+    console.error(error.message || error);
+
+  }
+
+
 
   // Fill in the form with the values
-  for (const candidate of formCandidates) {
-    await page.act(candidate);
-  }
+  // for (const candidate of commentCandidates) {
+  //   console.log(candidate);
+  //   await page.act(candidate);
+  // }
+
+  // Fill in the form with the values
+  //  for (const candidate of formCandidates) {
+  //   await page.act(candidate);
+  // }
+
+  console.log(
+    chalk.green("switched to most recent comments!")
+  );
+
 
   await waitForEnter();
   await stagehand.close();
